@@ -1,0 +1,86 @@
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.3.1/dist/reset.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.3.1/dist/reveal.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.3.1/dist/theme/black.css" id="theme" />
+
+<div class="reveal">
+    <div class="slides">
+
+        <section>
+            <h3>Temporal.io</h3>
+            <p>Simplify the boilerplate around complex business logic by introducing more infrastructure complexity</p>
+            <p style="font-style: italic;">by Kosto</p>
+        </section>
+        <section>
+            <h3>Releaser</h3>
+            <div>
+                <ul>
+
+                    <li>Prepare and push release branch</li>
+                    <ul>
+                        <li>Create release branch from master</li>
+                        <li>Merge changes from develop (skip extensions.yaml)</li>
+                        <li>Push release branch</li>
+                    </ul>
+                    <li>Create PR to master</li>
+                    <li>Wait for contributions</li>
+                    <li>Merge PR to master</li>
+                    <li>Delete release branch</li>
+                    <li>Create tag</li>
+                </ul>
+            </div>
+        </section>
+
+        <section>
+            <h3>Simple?</h3>
+        </section>
+
+
+        <section>
+            <h3>Yes, but...</h3>
+            <div>
+                <ul>
+                    <li>Each step should retry</li>
+                    <li>Container restart shouldn't disrupt the retries</li>
+                    <li>If create PR fails, the release branch should be deleted</li>
+                    <li>We need to wait for the PR approval</li>
+
+                </ul>
+            </div>
+        </section>
+
+
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.3.1/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js-mermaid-plugin@2.3.0/plugin/mermaid/mermaid.js"></script>
+<script>
+    Reveal.initialize({
+        controls: true,
+        progress: true,
+        center: true,
+        hash: true,
+
+        // mermaid initialize config
+        mermaid: {
+            // flowchart: {
+            //   curve: 'linear',
+            // },
+        },
+
+        // this plugin config
+        // mermaidPlugin: {
+        //   beforeRender(el) {
+        //     console.log(el);
+        //     // if return false this element will not call mermaid render
+        //   },
+        //
+        //   afterRender(el) {
+        //     console.log(el);
+        //   },
+        // },
+
+        plugins: [RevealMermaid],
+    });
+</script>
