@@ -138,8 +138,7 @@
                 <div>
                     <pre><code data-language="go" data-trim>
 func RunProgram() error {
-    temporalClient, _ := client.Dial(client.Options{}) // error handling omitted
-    // worker package imported from go.temporal.io/sdk/worker
+    temporalClient, _ := client.Dial(client.Options{})
     w := worker.New(temporalClient, github.QueueName, worker.Options{})
     w.RegisterWorkflow(github.SomeWorkflow)
     w.RegisterActivity(&github.ReleaseProcess{
@@ -204,7 +203,6 @@ func SomeWorkflow(ctx workflow.Context) (err error) {
     ).Get(ctx, &prID); createErr != nil {
         return createErr
     }
-
     return nil
 }
                     </code></pre>
@@ -275,7 +273,7 @@ func handlerFunc(ctx *gin.Context){
 			    TaskQueue: github.QueueName,
 		    },
             github.CreateAndAwaitMergePR,
-            createInput.ReleaseName,
+            ctx.Param("release"),
         )
 		if wfErr != nil {
 			logrus.Errorf("Unable to create workflow: %s", wfErr)
@@ -301,20 +299,18 @@ func handlerFunc(ctx *gin.Context){
 
         </section>
 
-
         <section>
             <section>
                 <h3>More temporal features</h3>
             </section>
 
-
             <section>
                 <h3>Signals</h3>
                 <div>
-                    <todo>todo</todo>
                     <ul>
                         <li>Can be sent to a workflow from outside</li>
                         <li>Can be used to send messages between running workflows</li>
+                        <li>Signal yields no response, so it's one-way</li>
                     </ul>
                 </div>
             </section>
@@ -323,7 +319,6 @@ func handlerFunc(ctx *gin.Context){
             <section>
                 <h3>Queries</h3>
                 <div>
-                    <todo>todo</todo>
                     <ul>
                         <li>Allows setting custom handlers</li>
                         <li>Customize the info clients can obtain about running workflows</li>
@@ -335,10 +330,10 @@ func handlerFunc(ctx *gin.Context){
             <section>
                 <h3>Updates</h3>
                 <div>
-                    <todo>Make sure you understand how they work!!!</todo>
                     <ul>
                         <li>Allows setting custom handlers</li>
-                        <li>Customize the info clients can obtain about running workflows</li>
+                        <li>Can be used to send messages between running workflows</li>
+                        <li>The updates from client are synchronous - client waits for completion</li>
                     </ul>
                 </div>
             </section>

@@ -18,7 +18,7 @@ func OrchestrateReleaseProcess(ctx workflow.Context, releaseName string) (err er
 			InitialInterval:    time.Second,      //amount of time that must elapse before the first retry occurs
 			MaximumInterval:    time.Second * 10, //maximum interval between retries
 			BackoffCoefficient: 1.1,              //how much the retry interval increases
-			// MaximumAttempts: 5, // Uncomment this if you want to limit attempts
+			MaximumAttempts:    5,                // Uncomment this if you want to limit attempts
 		},
 	}
 	saga := NewSaga()
