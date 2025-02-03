@@ -4,58 +4,64 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
+const QueueName = "github"
+const ApproveSignal = "approve"
+
 // This is very simplified approach, only used to demonstrate the idea
-type Branch string
+type RefName string
+type Ref string
 
 type Repo interface {
-	Head() Branch
+	Head() RefName
 
-	Create(Branch) error
-	Checkout(Branch) error
-	Delete(Branch) error
-	Merge(Branch) error
-	Push(context.Context, Branch) error
+	Create(RefName) error
+	Checkout(RefName) error
+	Delete(RefName) error
+	Merge(RefName) error
+	Push(context.Context, Ref) error
 }
 
 type PullRequestID string
 
 type Client interface {
-	CreatePullRequest(ctx context.Context, repo Repo, base, head Branch) (PullRequestID, error)
+	CreatePullRequest(ctx context.Context, repo Repo, base, head RefName) (PullRequestID, error)
 	MergePullRequest(ctx context.Context, repo Repo, prID PullRequestID) error
+	DeletePullRequest(ctx context.Context, repo Repo, prID PullRequestID) error
 }
 
 type MockRepo struct {
 }
 
-func (r *MockRepo) Head() Branch {
-	return "main"
+func (r *MockRepo) Head() RefName {
+	return "master"
 }
 
-func (r *MockRepo) Create(b Branch) error {
+func (r *MockRepo) Create(b RefName) error {
 	logrus.Warnf("Created %s", b)
 	return nil
 }
 
-func (r *MockRepo) Checkout(b Branch) error {
+func (r *MockRepo) Checkout(b RefName) error {
 	logrus.Warnf("Checked out %s", b)
 	return nil
 }
 
-func (r *MockRepo) Delete(b Branch) error {
-	logrus.Warnf("Deleted out %s", b)
+func (r *MockRepo) Delete(b RefName) error {
+	logrus.Warnf("Deleted %s", b)
 	return nil
 }
 
-func (r *MockRepo) Merge(b Branch) error {
+func (r *MockRepo) Merge(b RefName) error {
 
-	logrus.Warnf("Checked out %s to %s", b, r.Head())
+	logrus.Warnf("Merged %s to %s", b, r.Head())
 	return nil
 }
 
-func (r *MockRepo) Push(_ context.Context, b Branch) error {
+func (r *MockRepo) Push(_ context.Context, b Ref) error {
 	logrus.Warnf("Pushed %s", b)
 	return nil
 }
@@ -63,9 +69,10 @@ func (r *MockRepo) Push(_ context.Context, b Branch) error {
 type MockClient struct {
 }
 
-func (c *MockClient) CreatePullRequest(_ context.Context, r Repo, base Branch, target Branch) (PullRequestID, error) {
-	logrus.Warnf("Created PR from %s to %s", base, target)
-	return "123", nil
+func (c *MockClient) CreatePullRequest(_ context.Context, r Repo, base RefName, target RefName) (PullRequestID, error) {
+	prID := uuid.New().String()
+	logrus.Warnf("Created PR ID %s from %s to %s", prID, target, base)
+	return PullRequestID(prID), nil
 }
 
 func (c *MockClient) MergePullRequest(_ context.Context, r Repo, prID PullRequestID) error {
@@ -73,52 +80,56 @@ func (c *MockClient) MergePullRequest(_ context.Context, r Repo, prID PullReques
 	return nil
 }
 
+func (c *MockClient) DeletePullRequest(_ context.Context, r Repo, prID PullRequestID) error {
+	logrus.Warnf("Deleted PR %s", prID)
+	return nil
+}
+
 type ReleaseProcess struct {
 	Repo       Repo
 	Client     Client
-	BaseBranch Branch
+	BaseBranch RefName
 }
 
-func (r *ReleaseProcess) PrepareAndPushReleaseBranch(ctx context.Context, release string) (Branch, error) {
+func (r *ReleaseProcess) PrepareAndPushReleaseBranch(ctx context.Context, release string) (RefName, error) {
 	if checkoutErr := r.Repo.Checkout(r.BaseBranch); checkoutErr != nil {
 		return "", fmt.Errorf("failed to checkout base branch: %w", checkoutErr)
 	}
-	releaseBranch := Branch(fmt.Sprintf("release/%s", release))
-	if createErr := r.Repo.Create(releaseBranch); createErr != nil {
+	releaseName := RefName(fmt.Sprintf("release/%s", release))
+	if createErr := r.Repo.Create(releaseName); createErr != nil {
 		return "", fmt.Errorf("failed to create release branch: %w", createErr)
 	}
-	if mergeErr := r.Repo.Merge(r.BaseBranch); mergeErr != nil {
+	if mergeErr := r.Repo.Merge("develop"); mergeErr != nil {
 		return "", fmt.Errorf("failed to merge base branch: %w", mergeErr)
 	}
-	if pushErr := r.Repo.Push(ctx, releaseBranch); pushErr != nil {
+	if pushErr := r.Repo.Push(ctx, Ref(fmt.Sprintf(
+		"refs/heads/%s", releaseName,
+	))); pushErr != nil {
 		return "", fmt.Errorf("failed to push release branch: %w", pushErr)
 	}
-	return releaseBranch, nil
+	return releaseName, nil
 }
 
-func (r *ReleaseProcess) CreatePR(ctx context.Context, releaseBranch Branch) (PullRequestID, error) {
-	return r.Client.CreatePullRequest(ctx, r.Repo, r.BaseBranch, releaseBranch)
+func (r *ReleaseProcess) CreatePR(ctx context.Context, release RefName) (PullRequestID, error) {
+	return r.Client.CreatePullRequest(ctx, r.Repo, r.BaseBranch, RefName(fmt.Sprintf("release/%s", release)))
 }
 
 func (r *ReleaseProcess) MergePR(ctx context.Context, prID PullRequestID) error {
 	return r.Client.MergePullRequest(ctx, r.Repo, prID)
 }
 
-func (r *ReleaseProcess) DeleteReleaseBranch(ctx context.Context, releaseBranch Branch) error {
-	return r.Repo.Delete(releaseBranch)
+func (r *ReleaseProcess) DeletePR(ctx context.Context, prID PullRequestID) error {
+	return r.Client.DeletePullRequest(ctx, r.Repo, prID)
 }
 
-func process(r Repo, c Client, release string) {
-	r.Checkout("master")
-	releaseBranch := Branch(fmt.Sprintf("release/%s", release))
-	r.Create(releaseBranch)
-	r.Merge("develop")
-	r.Push(context.Background(), releaseBranch)
-	prId, _ := c.CreatePullRequest(context.Background(), r, r.Head(), "master")
+func (r *ReleaseProcess) TagRelease(ctx context.Context, releaseName RefName) error {
+	return r.Repo.Push(ctx,
+		Ref(fmt.Sprintf("refs/tags/%s", releaseName)),
+	)
+}
 
-	// Wait here for the PR to be approved
-
-	c.MergePullRequest(context.Background(), r, prId)
-	r.Delete(releaseBranch)
-	r.Push(context.Background(), releaseBranch)
+func (r *ReleaseProcess) DeleteReleaseBranch(ctx context.Context, releaseName RefName) error {
+	return r.Repo.Delete(
+		RefName(fmt.Sprintf("release/%s", releaseName)),
+	)
 }

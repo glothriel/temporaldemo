@@ -2,12 +2,13 @@ package server
 
 import (
 	"context"
-	"log"
-	"time"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/glothriel/tempogo/pkg/github"
 	"github.com/sirupsen/logrus"
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 )
 
@@ -22,13 +23,38 @@ type createRequest struct {
 func Start() error {
 	r := gin.Default()
 
-	logrus.Info("Starting Temporal client")
-	c, err := client.Dial(client.Options{})
-	if err != nil {
-		log.Fatalln("Unable to create client", err)
+	c, dialErr := client.Dial(client.Options{})
+	if dialErr != nil {
+		logrus.Panicf("Unable to create client: %s", dialErr)
 	}
-	logrus.Info("Temporal client started")
 	defer c.Close()
+
+	r.GET("/", func(ctx *gin.Context) {
+		list, listErr := c.ListWorkflow(
+			context.Background(),
+			&workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: "default",
+				Query:     "WorkflowType='OrchestrateReleaseProcess'",
+			},
+		)
+		if listErr != nil {
+			logrus.Errorf("Unable to list workflows: %s", listErr)
+			ctx.JSON(500, gin.H{
+				"error": "Unable to list workflows",
+			})
+			return
+		}
+		var workflows []map[string]any
+		for _, wf := range list.Executions {
+			workflows = append(workflows, map[string]any{
+				"workflow_id": wf.GetExecution().GetWorkflowId(),
+				"status":      wf.GetStatus().String(),
+			})
+		}
+		ctx.JSON(200, gin.H{
+			"result": workflows,
+		})
+	})
 
 	r.POST("/", func(ctx *gin.Context) {
 		var createInput createRequest
@@ -39,16 +65,17 @@ func Start() error {
 			return
 		}
 
-		workflowID := "release/" + createInput.ReleaseName + "-" + time.Now().Format("2006-01-02T15:04:05")
-
-		options := client.StartWorkflowOptions{
-			ID:        workflowID,
-			TaskQueue: github.QueueName,
-		}
-
-		wf, err := c.ExecuteWorkflow(context.Background(), options, github.OrchestrateReleaseProcess, createInput.ReleaseName)
-		if err != nil {
-			log.Fatalln("Unable to execute workflow", err)
+		wf, wfErr := c.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
+			ID:                    fmt.Sprintf("create-release-%s", createInput.ReleaseName),
+			TaskQueue:             github.QueueName,
+			WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+		}, github.OrchestrateReleaseProcess, createInput.ReleaseName)
+		if wfErr != nil {
+			logrus.Errorf("Unable to create workflow: %s", wfErr)
+			ctx.JSON(500, gin.H{
+				"error": "Unable to create workflow",
+			})
+			return
 		}
 
 		ctx.JSON(200, gin.H{
@@ -57,7 +84,6 @@ func Start() error {
 	})
 
 	r.POST("/approve", func(ctx *gin.Context) {
-		// Parse the request
 		var approveInput workloadIDRequest
 		if err := ctx.BindJSON(&approveInput); err != nil {
 			ctx.JSON(400, gin.H{
@@ -66,7 +92,6 @@ func Start() error {
 			return
 		}
 
-		// Signal the workflow
 		signalErr := c.SignalWorkflow(context.Background(), approveInput.WorkflowID, "", github.ApproveSignal, nil)
 		if signalErr != nil {
 			logrus.Errorf("Unable to signal workflow %s: %s", approveInput.WorkflowID, signalErr)
@@ -79,7 +104,6 @@ func Start() error {
 	})
 
 	r.POST("/cancel", func(ctx *gin.Context) {
-		// Parse the request
 		var stopInput workloadIDRequest
 		if err := ctx.BindJSON(&stopInput); err != nil || stopInput.WorkflowID == "" {
 			ctx.JSON(400, gin.H{
@@ -88,8 +112,6 @@ func Start() error {
 			return
 		}
 
-		// Cancel the workflow
-		logrus.Infof("Cancelling workflow %s", stopInput.WorkflowID)
 		cancelErr := c.CancelWorkflow(context.Background(), stopInput.WorkflowID, "")
 		if cancelErr != nil {
 			logrus.Errorf("Unable to cancel workflow %s: %s", stopInput.WorkflowID, cancelErr)

@@ -15,9 +15,9 @@ func OrchestrateReleaseProcess(ctx workflow.Context, releaseName string) (err er
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second, //amount of time that must elapse before the first retry occurs
-			MaximumInterval:    time.Minute, //maximum interval between retries
-			BackoffCoefficient: 2,           //how much the retry interval increases
+			InitialInterval:    time.Second,      //amount of time that must elapse before the first retry occurs
+			MaximumInterval:    time.Second * 10, //maximum interval between retries
+			BackoffCoefficient: 1.1,              //how much the retry interval increases
 			// MaximumAttempts: 5, // Uncomment this if you want to limit attempts
 		},
 	}
@@ -26,24 +26,25 @@ func OrchestrateReleaseProcess(ctx workflow.Context, releaseName string) (err er
 	defer func() {
 		if err != nil {
 			disconnectedCtx, _ := workflow.NewDisconnectedContext(ctx)
-			saga.Add(disconnectedCtx, true)
+			saga.Unwind(disconnectedCtx)
 		}
 	}()
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
 	var rp *ReleaseProcess
 
-	var releaseBranch Branch
-	err = workflow.ExecuteActivity(ctx, rp.PrepareAndPushReleaseBranch, releaseName).Get(ctx, &releaseBranch)
+	err = workflow.ExecuteActivity(ctx, rp.PrepareAndPushReleaseBranch, releaseName).Get(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("Failed to prepare and push release branch: %s", err)
 	}
-	saga.Unwind(rp.DeleteReleaseBranch, releaseBranch)
+	saga.Add(rp.DeleteReleaseBranch, releaseName)
 
-	err = workflow.ExecuteActivity(ctx, rp.CreatePR, releaseBranch).Get(ctx, nil)
+	var prID PullRequestID
+	err = workflow.ExecuteActivity(ctx, rp.CreatePR, releaseName).Get(ctx, &prID)
 	if err != nil {
 		return fmt.Errorf("Failed to create pull request: %s", err)
 	}
+	saga.Add(rp.DeletePR, prID)
 
 	sc := workflow.GetSignalChannel(ctx, ApproveSignal)
 	err = workflow.Await(ctx, func() bool {
@@ -55,12 +56,17 @@ func OrchestrateReleaseProcess(ctx workflow.Context, releaseName string) (err er
 	}
 	logrus.Warn("Received approval")
 
-	err = workflow.ExecuteActivity(ctx, rp.MergePR, releaseBranch).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, rp.MergePR, prID).Get(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("Failed to merge pull request: %s", err)
 	}
 
-	err = workflow.ExecuteActivity(ctx, rp.DeleteReleaseBranch, releaseBranch).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, rp.TagRelease, releaseName).Get(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("Failed to delete release branch: %s", err)
+	}
+
+	err = workflow.ExecuteActivity(ctx, rp.DeleteReleaseBranch, releaseName).Get(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("Failed to delete release branch: %s", err)
 	}
