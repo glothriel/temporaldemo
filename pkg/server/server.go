@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/glothriel/tempogo/pkg/github"
+	"github.com/glothriel/temporaldemo/pkg/github"
 	"github.com/sirupsen/logrus"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"

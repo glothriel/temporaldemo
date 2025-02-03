@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/glothriel/tempogo/cmd"
+	"github.com/glothriel/temporaldemo/cmd"
 	"github.com/sirupsen/logrus"
 )
 

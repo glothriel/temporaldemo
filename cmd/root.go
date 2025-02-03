@@ -3,8 +3,8 @@ package cmd
 import (
 	"context"
 
-	"github.com/glothriel/tempogo/pkg/github"
-	"github.com/glothriel/tempogo/pkg/server"
+	"github.com/glothriel/temporaldemo/pkg/github"
+	"github.com/glothriel/temporaldemo/pkg/server"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v3"
 	"go.temporal.io/sdk/client"
