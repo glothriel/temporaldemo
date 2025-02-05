@@ -3,6 +3,8 @@ package github
 import (
 	"context"
 	"fmt"
+	"os"
+	"path"
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -28,9 +30,10 @@ type Repo interface {
 type PullRequestID string
 
 type Client interface {
-	CreatePullRequest(ctx context.Context, repo Repo, base, head RefName) (PullRequestID, error)
+	CreatePullRequest(ctx context.Context, repo Repo, base, from RefName) (PullRequestID, error)
 	MergePullRequest(ctx context.Context, repo Repo, prID PullRequestID) error
 	DeletePullRequest(ctx context.Context, repo Repo, prID PullRequestID) error
+	IsPullRequestAccepted(ctx context.Context, repo Repo, prID PullRequestID) (bool, error)
 }
 
 type MockRepo struct {
@@ -69,9 +72,9 @@ func (r *MockRepo) Push(_ context.Context, b Ref) error {
 type MockClient struct {
 }
 
-func (c *MockClient) CreatePullRequest(_ context.Context, r Repo, base RefName, target RefName) (PullRequestID, error) {
+func (c *MockClient) CreatePullRequest(_ context.Context, r Repo, base RefName, from RefName) (PullRequestID, error) {
 	prID := uuid.New().String()
-	logrus.Warnf("Created PR ID %s from %s to %s", prID, target, base)
+	logrus.Warnf("Created PR ID %s from %s to %s", prID, from, base)
 	return PullRequestID(prID), nil
 }
 
@@ -83,6 +86,15 @@ func (c *MockClient) MergePullRequest(_ context.Context, r Repo, prID PullReques
 func (c *MockClient) DeletePullRequest(_ context.Context, r Repo, prID PullRequestID) error {
 	logrus.Warnf("Deleted PR %s", prID)
 	return nil
+}
+func (c *MockClient) IsPullRequestAccepted(_ context.Context, r Repo, prID PullRequestID) (bool, error) {
+	_, statErr := os.Stat(path.Join("/tmp", string(prID)))
+	isAccepted := true
+	if statErr != nil {
+		isAccepted = false
+	}
+	logrus.Warnf("Checking if PR is accepted: %v (%v)", isAccepted, statErr)
+	return isAccepted, nil
 }
 
 type ReleaseProcess struct {
@@ -110,6 +122,10 @@ func (r *ReleaseProcess) PrepareAndPushReleaseBranch(ctx context.Context, releas
 	return releaseName, nil
 }
 
+func ErrorOut(howProbable uint32) bool {
+	return uuid.New().ID()%howProbable != 0
+}
+
 func (r *ReleaseProcess) CreatePR(ctx context.Context, release RefName) (PullRequestID, error) {
 	return r.Client.CreatePullRequest(ctx, r.Repo, r.BaseBranch, RefName(fmt.Sprintf("release/%s", release)))
 }
@@ -126,6 +142,10 @@ func (r *ReleaseProcess) TagRelease(ctx context.Context, releaseName RefName) er
 	return r.Repo.Push(ctx,
 		Ref(fmt.Sprintf("refs/tags/%s", releaseName)),
 	)
+}
+
+func (r *ReleaseProcess) IsPullRequestAccepted(ctx context.Context, prID PullRequestID) (bool, error) {
+	return r.Client.IsPullRequestAccepted(ctx, r.Repo, prID)
 }
 
 func (r *ReleaseProcess) DeleteReleaseBranch(ctx context.Context, releaseName RefName) error {

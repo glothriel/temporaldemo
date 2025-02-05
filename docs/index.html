@@ -7,11 +7,11 @@
     body.reveal-viewport {
         background: linear-gradient(-45deg,
                 #1a1a1a,
-                #3e3e3e,
+                #080f1d,
                 #1f1f1f,
-                #262626);
+                #021630);
         background-size: 400% 400%;
-        animation: gradientBG 300s ease infinite;
+        animation: gradientBG 60s infinite;
     }
 
     @keyframes gradientBG {
@@ -75,7 +75,7 @@
         </section>
 
         <section>
-            <h3>Releaser 🔀</h3>
+            <h3>case: <a target="_blank" href="https://releaser.cldsrv.biz/ui/">Releaser</a> 🔀</h3>
             <div>
                 <ul>
                     <li>Prepare and push release branch</li>
@@ -115,6 +115,57 @@
                         <li>Replays the workflows if the worker is disrupted</li>
                         <li>Has libs for Java, C#, Ts, Go and Python (both sync and async APIs)</li>
                     </ul>
+                </div>
+            </section>
+
+
+            <section>
+                <h3>Temporal cont.</h3>
+                <div>
+                    <div class="mermaid">
+                        <pre>
+                            %%{init: {'theme': 'dark', 'themeVariables': {
+                                'primaryColor': '#2D323E',
+                                'primaryTextColor': '#fff',
+                                'primaryBorderColor': '#6B7280',
+                                'lineColor': '#6B7280',
+                                'secondaryColor': '#384152',
+                                'tertiaryColor': '#2D323E'
+                            }}}%%
+                            flowchart TB
+                                subgraph app[Your Application]
+                                    client[Client Application]
+                                    worker[Worker: Workflow Definitions, Activity Implementations]
+                                end
+                                
+                                subgraph temporal[Temporal Platform]
+                                    server[Temporal Server]
+                                    db[(Persistence Store)]
+                                end
+                                
+                                external[External Systems: Third-party services, DBs]
+                                
+                                %% Connections
+                                client -->|Start Workflow, Signal/Query| server
+                                server -->|Schedule Activities| worker
+                                worker -->|Execute Activities| external
+                                server -->|Store/Load State| db
+                                
+                                %% Styling
+                                classDef boundary fill:#384152,stroke:#6B7280,stroke-width:2px,color:#fff
+                                classDef component fill:#2D323E,stroke:#6B7280,color:#fff
+                                class app,temporal boundary
+                                class client,worker,server,db,external component
+                                
+                                %% Notes about external events
+                                note[External Events: Signals, Queries, Updates]
+                                server --- note
+                            
+                                %% Style the note
+                                classDef note fill:#2D323E,stroke:#6B7280,color:#fff
+                                class note note
+                        </pre>
+                      </div>
                 </div>
             </section>
 
@@ -295,6 +346,9 @@ func handlerFunc(ctx *gin.Context){
             <ul>
                 <li>New release workflow using temporal</li>
                 <li>Create PR, wait for approval, close release</li>
+                <li>Wait for external events & child workflows</li>
+                <li>Saga pattern - cancelling & unwind changes made by previous steps</li>
+                <li>Signal from outside</li>
             </ul>
 
         </section>
@@ -351,7 +405,27 @@ func handlerFunc(ctx *gin.Context){
                 </div>
             </section>
 
+            <section>
+                <h3>Testing framework</h3>
+                <div>
+                    <ul>
+                        <li>Allows integration testing of whole workflows</li>
+                        <li>In theory all bells and whistles should work (signals, queries, cancellations, sagas, etc)
+                        </li>
+                        <li>I couldn't make signals work, but the docs claim it's doable 🤷‍♂️</li>
+                    </ul>
+                </div>
+            </section>
+
         </section>
+
+        <section>
+            <h3>Sources</h3>
+            <div>
+                <ul>
+                    <li><a href="https://docs.temporal.io/docs/">Temporal docs</a></li>
+                </ul>
+            </section>
 
     </div>
 </div>

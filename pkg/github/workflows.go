@@ -18,7 +18,6 @@ func OrchestrateReleaseProcess(ctx workflow.Context, releaseName string) (err er
 			InitialInterval:    time.Second,      //amount of time that must elapse before the first retry occurs
 			MaximumInterval:    time.Second * 10, //maximum interval between retries
 			BackoffCoefficient: 1.1,              //how much the retry interval increases
-			MaximumAttempts:    5,                // Uncomment this if you want to limit attempts
 		},
 	}
 	saga := NewSaga()
@@ -47,6 +46,7 @@ func OrchestrateReleaseProcess(ctx workflow.Context, releaseName string) (err er
 	saga.Add(rp.DeletePR, prID)
 
 	sc := workflow.GetSignalChannel(ctx, ApproveSignal)
+
 	err = workflow.Await(ctx, func() bool {
 		var approveInput any
 		return sc.ReceiveAsync(&approveInput)
@@ -71,5 +71,34 @@ func OrchestrateReleaseProcess(ctx workflow.Context, releaseName string) (err er
 		return fmt.Errorf("Failed to delete release branch: %s", err)
 	}
 
+	return nil
+}
+
+func WaitUntilPRIsAccepted(ctx workflow.Context, pullRequestID string) (err error) {
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,      //amount of time that must elapse before the first retry occurs
+			MaximumInterval:    time.Second * 10, //maximum interval between retries
+			BackoffCoefficient: 1.1,              //how much the retry interval increases
+		},
+	}
+	var rp *ReleaseProcess
+	ctx = workflow.WithActivityOptions(ctx, ao)
+	isAccepted := false
+
+	for !isAccepted {
+		err = workflow.ExecuteActivity(ctx, rp.IsPullRequestAccepted, pullRequestID).Get(ctx, &isAccepted)
+		if err != nil {
+			return fmt.Errorf("Failed to check if PR is accepted: %s", err)
+		}
+		logrus.Infof("Checking if PR is accepted (%v)", isAccepted)
+		if !isAccepted {
+			sleepErr := workflow.Sleep(ctx, time.Second)
+			if sleepErr != nil {
+				return fmt.Errorf("Failed to sleep: %s", sleepErr)
+			}
+		}
+	}
 	return nil
 }

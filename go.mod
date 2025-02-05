@@ -9,6 +9,8 @@ require (
 	github.com/urfave/cli/v3 v3.0.0-beta1
 	go.temporal.io/api v1.43.0
 	go.temporal.io/sdk v1.32.1
+	logur.dev/adapter/logrus v0.5.0
+	logur.dev/logur v0.17.0
 )
 
 require (

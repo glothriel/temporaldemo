@@ -9,6 +9,9 @@ import (
 	"github.com/urfave/cli/v3"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
+
+	logrusadapter "logur.dev/adapter/logrus"
+	"logur.dev/logur"
 )
 
 func Start(args []string) error {
@@ -25,7 +28,10 @@ func Start(args []string) error {
 				Name:  "worker",
 				Usage: "Start a Temporal worker",
 				Action: func(ctx context.Context, _ *cli.Command) error {
-					c, dialErr := client.Dial(client.Options{})
+
+					c, dialErr := client.Dial(client.Options{
+						Logger: logur.LoggerToKV(logrusadapter.New(logrus.New())),
+					})
 					if dialErr != nil {
 						logrus.Panicf("Unable to connect to Temporal server: %v", dialErr)
 					}
